@@ -15,18 +15,21 @@ LEARNING_STARTS = 1000   # BUFFER SIZE WHICH UPDATES BEGIN
 TARGET_NETWORK_UPDATE_INTERVAL = 500
 EPSILON_START= 1.0
 EPSILON_END = 0.05
-EPSILON_DECAY_STEPS = 20000
-TOTAL_TRAINING_STEPS = 100000
+EPSILON_DECAY_STEPS = 100000
+TOTAL_TRAINING_STEPS = 50000
 GRADIENT_CLIP_NORM = 10
 SEED= 42
 NEGATIVE_INF = -10**9
 
 GRID_SIZE = 6
+CELL_COUNT = 36
+
+INPUT_CHANNEL = 3
 
 class environment():
     def __init__(self):
         self.grid_size = GRID_SIZE
-        self.cell_count = self.grid_size ** 2
+        self.cell_count = CELL_COUNT
         self.game = Game( grid_size=self.grid_size, bomb_count=11, n_players=1)
         self.step_count = 0
 
@@ -160,3 +163,59 @@ def select_action(network, observation, legal_mask, epsilon, device):
         pred = network(batch)
         pred_masked = torch.where(torch.tensor(legal_mask).to(device), pred, NEGATIVE_INF)
     return torch.argmax(pred_masked).item()
+
+if __name__ == '__main__':
+
+    random.seed(SEED)
+    torch.manual_seed(SEED)
+
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+    else:
+        device = torch.device('cpu')
+
+    print(f"device: {device}")
+
+    env = environment()
+    main_network = DQN(INPUT_CHANNEL,CELL_COUNT)    # 3 for hidden, bomb_found, neighbor_count in observe 
+    target_network = DQN(INPUT_CHANNEL, CELL_COUNT)
+    target_network.load_state_dict(main_network.state_dict())
+    optimizer = optim.Adam(main_network.parameters(), lr=LEARNING_RATE)
+    buffer = ReplayBuffer(BUFFER_CAPACITY)
+    learning_step = Learning_step(main_network, target_network, optimizer, GAMMA, device)
+    episode_length = []
+
+    observe, mask = env.reset()
+
+    episode_average = 36    # save best 100 episode average so far
+
+    for step in range(TOTAL_TRAINING_STEPS):
+        
+        epsilon = epsilon_schedule(step)
+        action = select_action(main_network, observe, mask, epsilon, device)
+        next_observe, mask, reward, is_done = env.step(action)
+        buffer.push(Transition(observe, action, reward, next_observe, mask, is_done))
+        observe = next_observe
+
+        if len(buffer) >= LEARNING_STARTS:
+            batch = buffer.sample(BATCH_SIZE)
+            loss = learning_step.update(batch)
+
+            if step % TARGET_NETWORK_UPDATE_INTERVAL == 0:
+                target_network.load_state_dict(main_network.state_dict())
+
+        if is_done:
+            step_count = env.step_count
+            episode_length.append(step_count)
+            if len(episode_length) % 100 == 0:
+                
+                new_avg = np.mean(episode_length[-100:]) 
+                if new_avg < episode_average:
+                    torch.save(main_network.state_dict(), 'best_dqn.pt')
+                    episode_average = new_avg
+
+                print(f"global step: {step} \n step count: {step_count} average step count: {new_avg}\n" + \
+                    f"\n epsilon: {epsilon:.2f} \n  loss: {loss:.2f}")
+            observe, mask = env.reset()
+
+    torch.save(main_network.state_dict(), 'final_dqn.pt')

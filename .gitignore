@@ -2,3 +2,5 @@
 __pycache__
 task.pdf
 temp.py
+weight
+*.pt
