@@ -1,2 +1,4 @@
 # install with:  pip install -r requirements.txt
 pygame>=2.0
+torch
+numpy
