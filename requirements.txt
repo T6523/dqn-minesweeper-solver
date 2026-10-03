@@ -2,3 +2,6 @@
 pygame>=2.0
 torch
 numpy
+scipy
+onnx
+onnxruntime

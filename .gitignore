@@ -4,4 +4,7 @@ task.pdf
 temp.py
 test.py
 weight
+model/*
 *.pt
+*.json
+*.onnx

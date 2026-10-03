@@ -6,8 +6,9 @@ import random
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+from scipy.signal import convolve2d
 
-GAMMA = 0.5
+GAMMA = 0.3
 LEARNING_RATE = 0.001
 BATCH_SIZE = 64 
 BUFFER_CAPACITY = 20000
@@ -15,40 +16,68 @@ LEARNING_STARTS = 1000   # BUFFER SIZE WHICH UPDATES BEGIN
 TARGET_NETWORK_UPDATE_INTERVAL = 500
 EPSILON_START= 1.0
 EPSILON_END = 0.05
-EPSILON_DECAY_STEPS = 20000
-TOTAL_TRAINING_STEPS = 100000
+EPSILON_DECAY_STEPS = 10000
+TOTAL_TRAINING_STEPS = 30000
 GRADIENT_CLIP_NORM = 10
 SEED= 42
 NEGATIVE_INF = -10**9
 
 GRID_SIZE = 6
-CELL_COUNT = 36
+CELL_COUNT = GRID_SIZE ** 2
+BOMB_COUNT = 11
 
-INPUT_CHANNEL = 3
+INPUT_CHANNEL = 7
+
+EVAL_GAME = 500
+EVAL_SEED = 12345
+EVAL_INTERVAL = 4000
+
 
 class environment():
     def __init__(self):
         self.grid_size = GRID_SIZE
         self.cell_count = CELL_COUNT
-        self.game = Game( grid_size=self.grid_size, bomb_count=11, n_players=1)
+        self.game = Game( grid_size=self.grid_size, bomb_count=BOMB_COUNT, n_players=1)
         self.step_count = 0
 
     def observe(self):
         hidden = [1] *  self.cell_count
         bomb_found = [0] *  self.cell_count
-        neighbor_count = [0] * self.cell_count
+        count = [0] * self.cell_count
+
         for (row,col), val in self.game.revealed.items():
             idx = row*self.grid_size + col
             hidden[idx] = 0
             if val == BOMB:
                 bomb_found[idx] = 1
             else:
-                neighbor_count[idx] = val / 8
-        legal_mask =  np.array(hidden).astype(bool)
+                count[idx] = val 
+        
+        hidden = np.array(hidden).reshape(self.grid_size,self.grid_size)
+        bomb_found = np.array(bomb_found).reshape(self.grid_size,self.grid_size)
+        count = np.array(count).reshape(self.grid_size,self.grid_size)
+        legal_mask =  hidden.astype(bool).flatten()
+        shown_empty = (1-hidden) * (1-bomb_found)
+        kernel = np.array([
+            [1,1,1],
+            [1,0,1],
+            [1,1,1]
+        ])
+        revealed_bomb_neighbor = convolve2d(bomb_found, kernel, mode='same', boundary='fill', fillvalue=0)
+        remaining = np.where(shown_empty == 1, np.maximum(0, count - revealed_bomb_neighbor), 0)
+        hidden_neighbor = convolve2d(hidden, kernel, mode='same', boundary='fill', fillvalue=0)
+        ratio = np.where((shown_empty ==1)&(remaining>0), np.minimum(1, remaining / np.maximum(hidden_neighbor,1)), 0)
+
+        density = np.full((self.grid_size, self.grid_size), (BOMB_COUNT - np.sum(bomb_found)) / max(np.sum(hidden),1))
+
         return np.stack([
-            np.array(hidden).reshape(self.grid_size,self.grid_size),
-            np.array(bomb_found).reshape(self.grid_size,self.grid_size),
-            np.array(neighbor_count).reshape(self.grid_size,self.grid_size)
+            hidden,             # 1 for hidden, 0 for shown
+            bomb_found,         # is it revealed as a bomb, 1 for bomb
+            count / 8,          # revealed value when empty (not a bomb)
+            remaining / 8,      # remaining bomb in neighbor hidden cell
+            hidden_neighbor / 8,    # count of hidden neighbor
+            ratio,              # remaining neighbor bomb count divide by hidden neighbor count
+            density             # global bomb to hidden cell ration, a constant for all cells
         ], axis = 0, dtype=np.float32) , legal_mask
     
     def reset(self):
@@ -68,17 +97,19 @@ class environment():
         return observable, mask , reward, result['done'] 
 
 class DQN(nn.Module):
-    def __init__(self, input_channels, output_dim):
+    def __init__(self):
         super().__init__()
         self.network = nn.Sequential(
-            nn.Conv2d(input_channels, 32 , kernel_size=3 , padding=1),
+            nn.Conv2d(INPUT_CHANNEL, 64 , kernel_size=3 , padding=1),
             nn.ReLU(),
-            nn.Conv2d(32, 64 , kernel_size=3 , padding=1),
+            nn.Conv2d(64, 64 , kernel_size=3 , padding=1),
             nn.ReLU(),
-            nn.Flatten(),
-            nn.Linear(64 * output_dim, 128),
+            nn.Conv2d(64, 64 , kernel_size=3 , padding=1),
             nn.ReLU(),
-            nn.Linear(128, output_dim)
+            nn.Conv2d(64, 64 , kernel_size=3 , padding=1),
+            nn.ReLU(),
+            nn.Conv2d(64, 1 , kernel_size=1),
+            nn.Flatten()
         )
 
     def forward(self, x):
@@ -86,6 +117,27 @@ class DQN(nn.Module):
 
 Transition = namedtuple('Transition',
                         ('observe','action','reward','next_observe','next_legal_mask','is_done'))
+
+class Symmetric():
+    def __init__(self, grid_size):
+        self.base = np.arange(grid_size)
+        self.table, self.reverse_table = self.eight_symmetry(self.base) # each table is (8, N*N)
+
+    def eight_symmetry(self, grid):
+        rot90, rot180, rot270 = np.rot90(grid).flatten(), np.rot90(grid, k=2).flatten(), np.rot90(grid, k=3).flatten()
+        flipped = np.fliplr(grid)
+        flipped_rot90,flipped_rot180,flipped_rot270  = np.rot90(flipped).flatten(), np.rot90(flipped,k=2).flatten(), np.rot90(flipped,k=3).flatten()
+        table = torch.tensor(
+            np.stack([
+            grid.flatten(), rot90, rot180, rot270, \
+            flipped.flatten(), flipped_rot90, flipped_rot180, flipped_rot270
+            ])
+        )
+        return table, table.argsort(dim=-1) 
+
+    def reorder(self, batch, ids):
+        reordered = torch.gather(batch, dim=1, index=ids)
+        ...
 
 class ReplayBuffer():
     def __init__(self, capacity):
@@ -177,10 +229,11 @@ if __name__ == '__main__':
     print(f"device: {device}")
 
     env = environment()
-    main_network = DQN(INPUT_CHANNEL,CELL_COUNT)    # 3 for hidden, bomb_found, neighbor_count in observe 
-    target_network = DQN(INPUT_CHANNEL, CELL_COUNT)
+    main_network = DQN()    
+    target_network = DQN()
     target_network.load_state_dict(main_network.state_dict())
     optimizer = optim.Adam(main_network.parameters(), lr=LEARNING_RATE)
+    symmetric = Symmetric(GRID_SIZE)
     buffer = ReplayBuffer(BUFFER_CAPACITY)
     learning_step = Learning_step(main_network, target_network, optimizer, GAMMA, device)
     episode_length = []
