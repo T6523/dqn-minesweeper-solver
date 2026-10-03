@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-GAMMA = 0.95
+GAMMA = 0.5
 LEARNING_RATE = 0.001
 BATCH_SIZE = 64 
 BUFFER_CAPACITY = 20000
@@ -15,8 +15,8 @@ LEARNING_STARTS = 1000   # BUFFER SIZE WHICH UPDATES BEGIN
 TARGET_NETWORK_UPDATE_INTERVAL = 500
 EPSILON_START= 1.0
 EPSILON_END = 0.05
-EPSILON_DECAY_STEPS = 100000
-TOTAL_TRAINING_STEPS = 50000
+EPSILON_DECAY_STEPS = 20000
+TOTAL_TRAINING_STEPS = 100000
 GRADIENT_CLIP_NORM = 10
 SEED= 42
 NEGATIVE_INF = -10**9
@@ -184,6 +184,7 @@ if __name__ == '__main__':
     buffer = ReplayBuffer(BUFFER_CAPACITY)
     learning_step = Learning_step(main_network, target_network, optimizer, GAMMA, device)
     episode_length = []
+    loss = 0 # init
 
     observe, mask = env.reset()
 
@@ -211,11 +212,11 @@ if __name__ == '__main__':
                 
                 new_avg = np.mean(episode_length[-100:]) 
                 if new_avg < episode_average:
-                    torch.save(main_network.state_dict(), 'best_dqn.pt')
+                    torch.save(main_network.state_dict(), 'weight/best_dqn.pt')
                     episode_average = new_avg
 
-                print(f"global step: {step} \n step count: {step_count} average step count: {new_avg}\n" + \
-                    f"\n epsilon: {epsilon:.2f} \n  loss: {loss:.2f}")
+                print(f"global step: {step} \nstep count: {step_count} \naverage step count: {new_avg} " + \
+                    f"epsilon: {epsilon:.2f} loss: {loss:.2f} \n")
             observe, mask = env.reset()
 
-    torch.save(main_network.state_dict(), 'final_dqn.pt')
+    torch.save(main_network.state_dict(), 'weight/final_dqn.pt')
