@@ -120,7 +120,7 @@ Transition = namedtuple('Transition',
 
 class Symmetric():
     def __init__(self, grid_size):
-        self.base = np.arange(grid_size)
+        self.base = np.arange(grid_size**2).reshape(grid_size, grid_size)
         self.table, self.reverse_table = self.eight_symmetry(self.base) # each table is (8, N*N)
 
     def eight_symmetry(self, grid):
@@ -135,26 +135,52 @@ class Symmetric():
         )
         return table, table.argsort(dim=-1) 
 
-    def reorder(self, batch, ids):
-        reordered = torch.gather(batch, dim=1, index=ids)
-        ...
+    def reorder(self, batch, symmetry_ids):      # batch is (batch, channel, n, n)
+        flat_batch = torch.flatten(batch,start_dim=2,end_dim=3)     # (batch, channel, n*n)
+        table = self.table[symmetry_ids]                     # (batch, n*n)
+        sample_with_channel = table.unsqueeze(1)             # (batch, 1, n*n)
+        expanded = sample_with_channel.expand_as(flat_batch)        # (batch, channel, n*n) 
+        reordered = torch.gather(flat_batch, dim=2, index=expanded)      # (batch, channel, n*n)
+        reshaped = reordered.reshape_as(batch)
+        return reshaped
+
+    def reorder_mask(self, mask, symmetry_ids):
+        table = self.table[symmetry_ids]
+        return torch.gather(mask, dim=1, index=table)
+
+    def map_action(self, actions, symmetry_ids):
+        return self.reverse_table[symmetry_ids, actions]
+
+    def augment(self, batch, symmetry_ids=None):
+        obs, action, reward, next_obs, next_mask, is_done =  batch
+        if symmetry_ids is None:
+            symmetry_ids = torch.randint(0, 8, (obs.shape[0],))    # 8 is size of symmetric map (across 8 tranformation)
+        reorder_obs = self.reorder(obs, symmetry_ids)
+        reorder_next_obs = self.reorder(next_obs, symmetry_ids)
+        reorder_next_mask = self.reorder_mask(next_mask, symmetry_ids)
+        map_act = self.map_action(action, symmetry_ids)
+        return reorder_obs, map_act, reward, reorder_next_obs, reorder_next_mask, is_done 
 
 class ReplayBuffer():
-    def __init__(self, capacity):
+    def __init__(self, capacity, symmetric=None):
         self.memory = deque([], maxlen=capacity)
+        self.symmetric= symmetric
 
     def push(self, transition):
         self.memory.append(transition)
 
     def sample(self, batch_size):
         obs, action, reward, next_obs, next_legal_mask, is_done = zip(*random.sample(self.memory, batch_size))
-        return torch.tensor(np.array(obs),dtype=torch.float32) , \
+        batch = torch.tensor(np.array(obs),dtype=torch.float32) , \
             torch.tensor(action, dtype=torch.long), \
             torch.tensor(reward,dtype=torch.float32) , \
             torch.tensor(np.array(next_obs),dtype=torch.float32), \
             torch.tensor(np.array(next_legal_mask),dtype=torch.bool), \
              torch.tensor(is_done,dtype=torch.float32)
-
+        if self.symmetric is not None:
+            batch = self.symmetric.augment(batch)
+        return batch
+    
     def __len__(self):
         return len(self.memory)
 
@@ -234,7 +260,7 @@ if __name__ == '__main__':
     target_network.load_state_dict(main_network.state_dict())
     optimizer = optim.Adam(main_network.parameters(), lr=LEARNING_RATE)
     symmetric = Symmetric(GRID_SIZE)
-    buffer = ReplayBuffer(BUFFER_CAPACITY)
+    buffer = ReplayBuffer(BUFFER_CAPACITY, symmetric)
     learning_step = Learning_step(main_network, target_network, optimizer, GAMMA, device)
     episode_length = []
     loss = 0 # init
