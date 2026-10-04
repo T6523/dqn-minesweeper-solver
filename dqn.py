@@ -28,9 +28,9 @@ BOMB_COUNT = 11
 
 INPUT_CHANNEL = 7
 
-EVAL_GAME = 500
+EVAL_GAME = 100
 EVAL_SEED = 12345
-EVAL_INTERVAL = 4000
+EVAL_INTERVAL = 5000
 
 
 class environment():
@@ -245,6 +245,20 @@ def select_action(network, observation, legal_mask, epsilon, device):
         pred_masked = torch.where(torch.tensor(legal_mask).to(device), pred, NEGATIVE_INF)
     return torch.argmax(pred_masked).item()
 
+def evaluate(network, device, game_count=EVAL_GAME, eval_seed=EVAL_SEED, bomb_count=BOMB_COUNT):
+    turn_count = []
+    for game_num in range(game_count):
+        env = environment()
+        env.game.rng = random.Random(eval_seed+game_num)
+        observe, mask = env.reset()
+        while True:
+            action = select_action(network, observe, mask, 0, device)
+            observe, mask, reward, is_done = env.step(action)
+            if is_done:
+                break
+        turn_count.append(env.step_count - bomb_count)
+    return np.average(turn_count)
+
 if __name__ == '__main__':
 
     random.seed(SEED)
@@ -270,7 +284,7 @@ if __name__ == '__main__':
 
     observe, mask = env.reset()
 
-    episode_average = 36    # save best 100 episode average so far
+    best_score = float('inf') 
 
     for step in range(TOTAL_TRAINING_STEPS):
         
@@ -288,17 +302,18 @@ if __name__ == '__main__':
                 target_network.load_state_dict(main_network.state_dict())
 
         if is_done:
-            step_count = env.step_count
+            step_count = env.step_count - BOMB_COUNT
             episode_length.append(step_count)
-            if len(episode_length) % 100 == 0:
-                
-                new_avg = np.mean(episode_length[-100:]) 
-                if new_avg < episode_average:
-                    torch.save(main_network.state_dict(), 'weight/best_dqn.pt')
-                    episode_average = new_avg
-
-                print(f"global step: {step} \nstep count: {step_count} \naverage step count: {new_avg} " + \
-                    f"epsilon: {epsilon:.2f} loss: {loss:.2f} \n")
             observe, mask = env.reset()
 
-    torch.save(main_network.state_dict(), 'weight/final_dqn.pt')
+        if step % EVAL_INTERVAL == 0 and step > 0:
+            score = evaluate(main_network, device, game_count=EVAL_GAME)
+            if score < best_score:
+                torch.save(main_network.state_dict(), 'weight/best_ddqn.pt')
+                best_score = score
+            print(f"global step: {step} score: {score:.2f}\n" + \
+            f"epsilon: {epsilon:.2f} loss: {loss:.2f} \n")
+
+    score = evaluate(main_network, device, game_count=EVAL_GAME*5)
+    print(f"FINAL SCORE: {score:.2f}\nepsilon: {epsilon:.2f} loss: {loss:.2f}")
+    torch.save(main_network.state_dict(), 'weight/final_ddqn.pt')
