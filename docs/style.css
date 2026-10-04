@@ -1,0 +1,232 @@
+/* Find My Mines: a survey chart. Open water is covered, soundings are the clues, mines are charted hazards. */
+:root {
+  color-scheme: dark;
+  /* surfaces */
+  --paper: #0a1722;      /* page */
+  --panel: #112433;      /* result box */
+  --line: #1d3646;       /* hairlines, clock track */
+  /* text */
+  --ink: #e9f1f4;
+  --ink-soft: #9ab0bd;
+  --ink-faint: #6a8594;  /* zero soundings */
+  /* the board: covered water, charted (revealed) cells, the grid between them */
+  --water: #1f4d66;
+  --water-hi: #2a6482;   /* a covered cell you can click, on hover */
+  --shore: #050d14;
+  --frame: #2c5a73;
+  /* the two players, the low-clock warning, and the colour of text on an accent fill */
+  --you: #4fb3ff;
+  --bot: #ffb02e;
+  --alert: #ff6b6b;
+  --on-accent: #04111a;
+  --focus: #e9f1f4;
+  /* clue numbers, from one neighbouring mine to five or more; hues kept away from the two player colours */
+  --d1: #b7e86b; --d2: #ff9b7a; --d3: #f58bd0; --d4: #b99cff; --d5: #5eead4;
+  --gap: 3px;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;   /* numbers: scores, clues, board labels */
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 1.0625rem/1.6 var(--sans);
+  font-variant-numeric: tabular-nums;
+}
+.app { max-width: 40rem; margin: 0 auto; padding: 0 16px; }
+
+/* The game is exactly one screen tall. Everything above and below the board has a fixed height, and the board
+   takes what is left (see .chart-wrap), so nothing needs scrolling. The About section follows below the fold. */
+.game {
+  height: 100vh; height: 100dvh; min-height: 34rem;
+  display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
+  row-gap: 12px; padding: 16px 0 14px;
+}
+
+.masthead h1 {
+  margin: 0;
+  font-size: clamp(2.4rem, 8vw, 3.2rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+}
+.masthead-top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 20px; }
+.links { display: flex; flex-wrap: wrap; gap: 2px 18px; }
+.repo-link { color: var(--ink-soft); font-size: 1rem; text-underline-offset: 3px; }
+.repo-link:hover { color: var(--ink); }
+.lede { margin: 8px 0 0; max-width: 44ch; font-size: 1rem; color: var(--ink-soft); }
+
+/* choosing an opponent */
+.opponent { border: 0; margin: 0; padding: 0; min-width: 0; }
+.opponent legend { padding: 0 0 6px; color: var(--ink-soft); font-size: 1rem; }
+.levels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.level {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 12px 11px;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background-color .12s, border-color .12s, color .12s;
+}
+.level input { position: absolute; opacity: 0; pointer-events: none; }
+.level-name { font-weight: 600; font-size: 1.125rem; }
+.level-note { font-size: .875rem; line-height: 1.35; color: var(--ink-soft); }
+.level:hover { border-color: var(--ink-soft); }
+.level:has(input:checked) { background: color-mix(in srgb, var(--you) 16%, var(--paper)); border-color: var(--you); }
+.level:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* scoreboard */
+.players { display: grid; grid-template-columns: auto 1fr auto; align-items: end; gap: 14px; margin: 0; }
+.player { display: flex; flex-direction: column; min-width: 4.5rem; padding-bottom: 4px; border-bottom: 4px solid transparent; transition: border-color .15s; }
+.player-bot { text-align: right; }
+.player-name { color: var(--ink-soft); font-size: 1rem; }
+.player-score { font-family: var(--mono); font-size: 2.75rem; font-weight: 600; line-height: 1; }
+.player.turn .player-name { color: var(--ink); font-weight: 600; }
+.player-you.turn { border-color: var(--you); }
+.player-bot.turn { border-color: var(--bot); }
+.clock { height: 6px; margin-bottom: 10px; border-radius: 3px; background: var(--line); opacity: 0; transition: opacity .15s; overflow: hidden; }
+.clock.running { opacity: 1; }
+.clock-bar { height: 100%; background: var(--you); transform-origin: left; transform: scaleX(0); }
+.clock.bot .clock-bar { background: var(--bot); }
+.clock.low .clock-bar { background: var(--alert); }
+
+/* the chart */
+.chart-wrap { position: relative; container-type: size; min-width: 0; min-height: 0; display: grid; place-items: center; }
+.chart {
+  /* the largest cell that lets axis + frame + 6 cells fit both the width and the height of the space left for the board */
+  --cell: clamp(30px, min((100cqh - 1.3rem - 21px) / 6, (100cqw - 1.4rem - 21px) / 6), 96px);
+  display: grid; grid-template-columns: 1.4rem auto; grid-template-rows: 1.3rem auto; }
+.axis { display: grid; gap: var(--gap); color: var(--ink-soft); font-family: var(--mono); font-size: .9rem; text-align: center; }
+.axis span { display: grid; place-items: center; }
+.axis-cols { grid-column: 2; grid-row: 1; grid-template-columns: repeat(6, var(--cell)); margin: 0 var(--gap); }
+.axis-rows { grid-column: 1; grid-row: 2; grid-template-rows: repeat(6, var(--cell)); margin: var(--gap) 0; }
+.grid {
+  grid-column: 2; grid-row: 2;
+  display: grid; grid-template-columns: repeat(6, var(--cell)); gap: var(--gap); padding: var(--gap);
+  background: var(--frame);
+  border-radius: 4px;
+}
+.cell {
+  position: relative;
+  display: grid; place-items: center;
+  width: var(--cell); height: var(--cell); padding: 0; margin: 0;
+  border: 0; border-radius: 1px;
+  color: inherit; font: inherit;
+  background-color: var(--water);
+  background-image: repeating-linear-gradient(135deg, transparent 0 7px, rgb(255 255 255 / .10) 7px 8px);
+  cursor: default;
+  transition: background-color .12s;
+}
+.cell.open { cursor: pointer; }
+/* the generic button:hover (dark fill) must not leak into the board: each state keeps its own colour when hovered */
+.cell:hover { background-color: var(--water); color: inherit; }
+.cell.open:hover { background-color: var(--water-hi); }
+.cell.shown:hover { background-color: var(--shore); }
+.cell:focus-visible { outline: 3px solid var(--focus); outline-offset: -4px; z-index: 1; }
+.cell.shown { background-color: var(--shore); background-image: none; }
+.cell:disabled { opacity: 1; }
+.sounding { font-family: var(--mono); font-size: calc(var(--cell) * .52); font-weight: 600; line-height: 1; }
+.depth-0 .sounding { color: var(--ink-faint); }
+.depth-1 .sounding { color: var(--d1); }
+.depth-2 .sounding { color: var(--d2); }
+.depth-3 .sounding { color: var(--d3); }
+.depth-4 .sounding { color: var(--d4); }
+.depth-5 .sounding { color: var(--d5); }
+.mine { width: 74%; height: 74%; }
+.mine-you { color: var(--you); }
+.mine-bot { color: var(--bot); }
+.cell.missed { background-color: var(--water); }
+.cell.missed .mine { color: var(--ink-soft); opacity: .55; }
+.cell.last-you { box-shadow: inset 0 0 0 3px var(--you); }
+.cell.last-bot { box-shadow: inset 0 0 0 3px var(--bot); }
+
+.loading {
+  position: absolute; inset: 0; display: grid; place-items: center; padding: 1rem; text-align: center;
+  background: color-mix(in srgb, var(--paper) 84%, transparent);
+  font-weight: 500;
+}
+.loading[hidden] { display: none; }
+.loading.error { color: var(--alert); }
+
+.feedback { display: grid; height: 2rem; align-content: center; line-height: 1.3; }   /* fixed, so the board never resizes at game over */
+.feedback > * { grid-area: 1 / 1; margin: 0; }
+.status { font-weight: 500; }
+.result { font-size: 1.25rem; font-weight: 600; padding-left: 12px; border-left: 5px solid var(--ink-soft); }
+.result[hidden] { display: none; }
+.result.won { border-color: var(--you); }
+.result.lost { border-color: var(--bot); }
+
+.controls { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px 16px; margin: 0; }
+button { font: inherit; font-weight: 600; cursor: pointer; border-radius: 8px; padding: .5rem 1rem; border: 2px solid var(--ink-soft); background: transparent; color: var(--ink); transition: background-color .12s, border-color .12s, color .12s; }
+button:hover { border-color: var(--you); background: color-mix(in srgb, var(--you) 14%, transparent); }
+button.primary { background: var(--you); border-color: var(--you); color: var(--on-accent); }
+button.primary:hover { background: color-mix(in srgb, var(--you) 82%, white); border-color: transparent; }
+button:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; min-width: 0; }
+.toggle[hidden] { display: none; }
+.toggle input { width: 1.1rem; height: 1.1rem; accent-color: var(--you); }
+.toggle input:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+.about { max-width: 40rem; margin-top: 24px; padding-top: 26px; border-top: 1px solid var(--line); }
+.about h2 { margin: 0 0 12px; font-size: 1.65rem; font-weight: 700; letter-spacing: -0.01em; line-height: 1.2; }
+.about h3 { margin: 26px 0 8px; font-size: 1.2rem; font-weight: 600; }
+.about p { margin: 0 0 12px; max-width: 62ch; }
+.about .fine { color: var(--ink-soft); font-size: .95rem; }
+.about a, .foot a { color: var(--ink); text-underline-offset: 3px; }
+.levels-table { width: 100%; border-collapse: collapse; margin: 0 0 12px; font-size: 1rem; }
+.levels-table th, .levels-table td { padding: 9px 10px 9px 0; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+.levels-table thead th { color: var(--ink-soft); font-weight: 500; font-size: .95rem; }
+.levels-table tbody th { font-weight: 700; white-space: nowrap; }
+.levels-table td:last-child, .levels-table th:last-child { text-align: right; padding-right: 0; white-space: nowrap; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+.foot { max-width: 40rem; margin: 30px 0 0; padding-bottom: 40px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--ink-soft); font-size: .9rem; }
+.foot p { margin: 0; max-width: 62ch; }
+
+.level-blurb { display: none; margin: 8px 0 0; color: var(--ink-soft); font-size: .95rem; }
+
+/* responsive rules last, so they override the base rules above */
+@media (min-width: 640px) and (min-aspect-ratio: 5/4), (min-width: 568px) and (min-aspect-ratio: 5/4) and (max-height: 520px) {   /* wide screens: controls on the left, board on the right */
+  .app { max-width: 78rem; }
+  .game {
+    grid-template-columns: minmax(19rem, 25rem) minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
+    grid-template-areas: "head stage" "levels stage" "scores stage" "feedback stage" "controls stage" "rest stage";
+    column-gap: 40px; padding: 24px 0;
+  }
+  .masthead { grid-area: head; } .opponent { grid-area: levels; } .players { grid-area: scores; }
+  .chart-wrap { grid-area: stage; } .feedback { grid-area: feedback; } .controls { grid-area: controls; }
+}
+@media (max-width: 480px) {
+  .game { row-gap: 10px; }
+  .masthead h1 { font-size: 2rem; }
+  .lede { font-size: 1rem; }
+  .opponent legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }   /* still read by screen readers */
+  .level-note { display: none; }
+  .level-blurb { display: block; margin-top: 6px; }
+  .level { padding: 9px 10px; }
+  .levels { gap: 6px; }
+  .player-score { font-size: 2rem; }
+}
+@media (max-width: 480px) and (max-height: 800px) { .level-blurb { display: none; } }
+@media (max-aspect-ratio: 5/4) and (max-height: 800px) { .level-note, .level-blurb { display: none; } }   /* stacked and short: spend the height on the board */
+@media (max-height: 700px) { .lede { display: none; } }
+@media (max-height: 520px) {                                   /* a phone held sideways */
+  .game { min-height: 0; padding: 8px 0; row-gap: 8px; }
+  .masthead h1 { font-size: 1.7rem; }
+  .lede, .level-blurb, .level-note { display: none; }
+  .level { padding: 6px 8px; }
+  .player-score { font-size: 1.75rem; }
+  .controls button { padding: .35rem .8rem; }
+  .opponent legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+}
+@media (max-height: 520px) and (min-width: 568px) and (min-aspect-ratio: 5/4) {   /* short side-by-side: narrower panel, wider board */
+  .game { grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr); column-gap: 24px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}

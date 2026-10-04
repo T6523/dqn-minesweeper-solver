@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0a1722">
+  <title>Find My Mines</title>
+  <meta name="description" content="Take turns uncovering a 6x6 minefield against a bot that learned the game by reinforcement learning. It runs entirely in your browser.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 40 40%27%3E%3Cg stroke=%27%230e2b3b%27 stroke-width=%273.2%27 stroke-linecap=%27round%27%3E%3Cpath d=%27M20 4v7M20 29v7M4 20h7M29 20h7M8.7 8.7l5 5M26.3 26.3l5 5M31.3 8.7l-5 5M13.7 26.3l-5 5%27/%3E%3C/g%3E%3Ccircle cx=%2720%27 cy=%2720%27 r=%2711%27 fill=%27%230e2b3b%27/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/ort.min.js"></script>
+</head>
+<body>
+  <main class="app">
+    <div class="game">
+    <header class="masthead">
+      <div class="masthead-top">
+        <h1>Find My Mines</h1>
+        <nav class="links"><a class="repo-link" href="https://github.com/T6523/dqn-minesweeper-solver" rel="noopener">View the code on GitHub</a><a class="repo-link" href="#about-title">About the bot</a></nav>
+      </div>
+      <p class="lede">Find more of the 11 mines than the bot. A mine lets you go again; an empty cell passes the turn.</p>
+    </header>
+
+    <fieldset class="opponent">
+      <legend>Play against</legend>
+      <div class="levels" role="radiogroup">
+        <label class="level"><input type="radio" name="level" value="easy"><span class="level-name">Easy</span><span class="level-note">Makes plenty of slips</span></label>
+        <label class="level"><input type="radio" name="level" value="medium"><span class="level-name">Medium</span><span class="level-note">Plays like a careful person</span></label>
+        <label class="level"><input type="radio" name="level" value="hard"><span class="level-name">Hard</span><span class="level-note">Reads every clue</span></label>
+      </div>
+      <p class="level-blurb" id="level-blurb"></p>
+    </fieldset>
+
+    <section class="players" aria-label="Score">
+      <div class="player player-you" id="card-you">
+        <span class="player-name">You</span>
+        <span class="player-score" id="score-you">0</span>
+      </div>
+      <div class="clock" aria-hidden="true"><div class="clock-bar" id="clock-bar"></div></div>
+      <div class="player player-bot" id="card-bot">
+        <span class="player-name" id="bot-name">Bot</span>
+        <span class="player-score" id="score-bot">0</span>
+      </div>
+    </section>
+
+    <section class="chart-wrap">
+      <div class="chart" id="chart">
+        <div class="axis axis-cols" aria-hidden="true"></div>
+        <div class="axis axis-rows" aria-hidden="true"></div>
+        <div class="grid" id="grid" role="group" aria-label="Minefield"></div>
+      </div>
+      <div class="loading" id="loading" role="status">Loading the model…</div>
+    </section>
+
+    <div class="feedback">
+      <p class="status" id="status" role="status" aria-live="polite">&nbsp;</p>
+      <p class="result" id="result" hidden><span id="result-line"></span></p>
+    </div>
+
+    <div class="controls">
+      <button type="button" id="new-game">New game</button>
+      <button type="button" class="primary" id="rematch" title="The winner moves first" hidden>Rematch</button>
+      <label class="toggle"><input type="checkbox" id="timer-toggle"> <span>10 second turns</span></label>
+    </div>
+    </div>
+
+    <section class="about" aria-labelledby="about-title">
+      <h2 id="about-title">About this bot</h2>
+      <p>The opponent is a Double DQN agent: a small convolutional network trained with reinforcement learning to find mines on
+      random boards. It runs entirely in your browser through ONNX Runtime Web, with no backend.</p>
+      <p>It sees only what you see: covered cells, clue numbers and mines already found. For each covered cell it estimates
+      how good a pick would be, and plays the best one.</p>
+
+      <h3>Difficulty</h3>
+      <p>Difficulty is the temperature of a softmax over those estimates. Hard always plays the top cell. Medium and Easy sample
+      from the distribution.</p>
+      <table class="levels-table">
+        <caption class="visually-hidden">Each level's behaviour and the turns it needs alone on a fresh board</caption>
+        <thead><tr><th scope="col">Level</th><th scope="col">Behaviour</th><th scope="col">Turns alone</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Easy</th><td>Slips often (high temperature)</td><td>about 17</td></tr>
+          <tr><th scope="row">Medium</th><td>Slips sometimes (low temperature)</td><td>about 12.5</td></tr>
+          <tr><th scope="row">Hard</th><td>Always plays its best guess (greedy)</td><td>about 10</td></tr>
+        </tbody>
+      </table>
+      <p class="fine">Random clicking needs about 23 turns, an
+      exact probability solver need about 9.9 turns.</p>
+      <p><a href="https://github.com/T6523/dqn-minesweeper-solver" rel="noopener">Architecture, training setup and results are in the repository README.</a></p>
+    </section>
+
+    <footer class="foot">
+      <a href="https://github.com/T6523/dqn-minesweeper-solver" rel="noopener">github.com/T6523/dqn-minesweeper-solver</a>.
+    </footer>
+  </main>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
