@@ -206,13 +206,16 @@ class Learning_step():
         _,_,reward,next_obs,next_mask,is_done = batch
 
         reward, next_obs, next_mask, is_done = reward.to(self.device), next_obs.to(self.device),  next_mask.to(self.device), is_done.to(self.device)
-        model = self.target_network.to(self.device)
+        target_model = self.target_network.to(self.device)
+        main_model = self.main_network.to(self.device)
         
         with torch.no_grad():
-            pred = model(next_obs)
-            pred_masked = torch.where(next_mask, pred, NEGATIVE_INF)
-            max_val = torch.max(pred_masked, dim=1).values
-            q_target = reward + self.gamma * max_val * (1-is_done)
+            action = main_model(next_obs)   # (batch, n*n)
+            action_masked = torch.where(next_mask, action, NEGATIVE_INF)
+            max_ids = torch.argmax(action_masked, dim=1, keepdim=True)    # (batch, 1)
+            pred = target_model(next_obs)   # (batch, n*n)
+            chosen = torch.gather(pred, dim=1, index=max_ids).squeeze(1)    # (batch,)
+            q_target = reward + self.gamma * chosen * (1-is_done)
 
         return q_target
 
