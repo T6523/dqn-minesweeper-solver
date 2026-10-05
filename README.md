@@ -1,6 +1,8 @@
 # Find My Mines: a deep Q-learning opponent in the browser
 
-A bot for a two-player 6×6 minefield, trained with Double DQN and exported to ONNX. It runs entirely client side at three difficulty levels. See the [web demo](#5-web-demo).
+A bot for a two-player 6×6 minefield, trained with Double DQN and exported to ONNX. It runs entirely client side at three difficulty levels. See the [web demo details](#5-web-demo).
+
+**[Play it live](https://t6523.github.io/dqn-minesweeper-solver/)**
 
 ## Summary
 
