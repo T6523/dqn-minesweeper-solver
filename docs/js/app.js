@@ -273,6 +273,20 @@ async function boot() {
       : `Could not load the model: ${err.message}`;
   }
 }
+const THEME_COLORS = { light: "#f4f7fb", dark: "#0b1016" };
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  $("#theme-toggle").setAttribute("aria-pressed", theme === "dark");
+  $("#theme-toggle").textContent = theme === "dark" ? "Light mode" : "Dark mode";
+  $('meta[name="theme-color"]').content = THEME_COLORS[theme];
+}
+applyTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+$("#theme-toggle").addEventListener("click", () => {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  store.set("fmm.theme", next);
+  applyTheme(next);
+});
+
 boot();
 
 // a handle for tests and tinkering in the console

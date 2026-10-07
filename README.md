@@ -1,14 +1,28 @@
-# Find My Mines: a deep Q-learning opponent in the browser
+# Find My Mines: a Double DQN opponent that runs in the browser
 
-A bot for a two-player 6×6 minefield, trained with Double DQN and exported to ONNX. It runs entirely client side at three difficulty levels. See the [web demo details](#5-web-demo).
+A Double DQN agent, written from scratch in PyTorch, for a two-player 6×6 minefield. It runs in the browser at three difficulty levels.
 
-**[Play it live](https://t6523.github.io/dqn-minesweeper-solver/)**
+**[Live demo](https://t6523.github.io/dqn-minesweeper-solver/)** · Reinforcement learning · Double DQN · PyTorch · ONNX · Convolutional Neural Network
 
-## Summary
+<p align="center"><img src="assets/demo.gif" alt="Playing the Hard bot: three picks, mines found by both sides, then the dark-mode button" width="400"></p>
 
-A 114,945-weight convolutional network trained with Double DQN needs **10.36 ± 0.07 turns** to find all 11 mines on 2,000 held-out boards. Random play needs 22.9, a hand-written heuristic 12.4 and an exact probability solver 9.9. The agent is 0.47 turns behind the solver (95% CI 0.38 to 0.57).
+## Highlights
 
-Two choices take a first network from 21.2 turns to about 10.7: a **fully convolutional head**, which shares one rule across all cells, and **symmetry augmentation**, which trains on all eight rotations and mirrors of every position. Removing either from the final recipe costs 1.5 to 1.7 turns.
+- **0.47 turns behind an exact solver.** A 114,945-weight convolutional network finds all 11 mines in 10.36 ± 0.07 turns on 2,000 held-out boards. The solver needs 9.92 and random play 22.86.
+- **Ablations over 3 seeds.** Removing the fully convolutional head or symmetry augmentation (all 8 rotations and mirrors) costs 1.5 to 1.7 turns each. Removing Double DQN makes no measurable difference.
+- **Client side.** The observation is rebuilt in JavaScript and matches Python to 6e-8 (outputs to 7e-7). The ONNX graph averages the network over the 8 board symmetries.
+- **Three levels from one model.** Easy and Medium sample moves from a softmax over the Q-values (17.4 and 12.6 turns). Hard plays the best cell and beats a hand-written heuristic in 75.2% of 1,000 games.
+
+## Results
+
+| Player                              | Turns to find all 11 mines (lower is better) |
+| ----------------------------------- | -------------------------------------------- |
+| Random legal cell                   | 22.86 ± 0.10                                |
+| Hand-written heuristic              | 12.41 ± 0.11                                |
+| **Deployed Double DQN agent** | **10.36 ± 0.07**                      |
+| Exact probability solver            | 9.92 ± 0.07                                 |
+
+Solo play on 2,000 fixed boards, 95% intervals. The agent's row uses a separate set of fresh boards, where the solver scores 9.89 ± 0.07. Ablations and matches are in section 4.
 
 ## 1. Task
 
@@ -22,15 +36,15 @@ Two players alternate on a 6×6 board hiding 11 mines. A pick on a mine scores a
 
 The agent sees only what a player sees: covered cells, clue numbers and mines already found. These become seven 6×6 channels.
 
-| # | Channel | Meaning |
-|---|---|---|
-| 0 | covered | 1 if the cell is covered |
-| 1 | found | 1 if the cell is a found mine |
-| 2 | clue / 8 | clue on an uncovered empty cell |
-| 3 | remaining / 8 | clue minus adjacent found mines (floor 0): mines the clue still has to account for |
-| 4 | covered neighbours / 8 | covered cells around each cell |
-| 5 | ratio | remaining ÷ covered neighbours: a clue's local mine probability |
-| 6 | density | mines left ÷ covered cells, constant across the board |
+| # | Channel                | Meaning                                                                            |
+| - | ---------------------- | ---------------------------------------------------------------------------------- |
+| 0 | covered                | 1 if the cell is covered                                                           |
+| 1 | found                  | 1 if the cell is a found mine                                                      |
+| 2 | clue / 8               | clue on an uncovered empty cell                                                    |
+| 3 | remaining / 8          | clue minus adjacent found mines (floor 0): mines the clue still has to account for |
+| 4 | covered neighbours / 8 | covered cells around each cell                                                     |
+| 5 | ratio                  | remaining ÷ covered neighbours: a clue's local mine probability                   |
+| 6 | density                | mines left ÷ covered cells, constant across the board                             |
 
 ### 2.2 Network
 
@@ -68,15 +82,15 @@ $A(s')$ is the set of covered cells in $s'$ and $d = 1$ if the move found the la
 
 **Symmetry augmentation.** A rotated or mirrored board is the same position, so each has eight equivalent versions. Each sampled transition is transformed by one of the eight at random: observation, next observation, legal-move mask and action together. This multiplies the data by eight.
 
-| Setting | Value |
-|---|---|
-| Discount factor $\gamma$ | 0.3 |
-| Optimiser | Adam, learning rate 1e-3, gradient norm clipped at 10 |
-| Batch, replay buffer | 64, 20,000 transitions |
-| Updates | one per step, starting after 1,000 transitions |
-| Target network | copied every 500 steps |
-| Exploration | $\varepsilon$ from 1.0 to 0.05 over the first 10,000 steps |
-| Run length | 30,000 steps, a few minutes on one GPU |
+| Setting                   | Value                                                        |
+| ------------------------- | ------------------------------------------------------------ |
+| Discount factor $\gamma$ | 0.3                                                          |
+| Optimiser                 | Adam, learning rate 1e-3, gradient norm clipped at 10        |
+| Batch, replay buffer      | 64, 20,000 transitions                                       |
+| Updates                   | one per step, starting after 1,000 transitions               |
+| Target network            | copied every 500 steps                                       |
+| Exploration               | $\varepsilon$ from 1.0 to 0.05 over the first 10,000 steps |
+| Run length                | 30,000 steps, a few minutes on one GPU                       |
 
 **Deployed checkpoint.** The 30,000-step run is evaluated greedily every 5,000 steps and the best checkpoint is kept: the one after 10,000 steps, where $\varepsilon$ reaches its floor.
 
@@ -110,12 +124,12 @@ so they sometimes choose lower-valued cells. The temperature is $T = 0.172$ for 
 
 ### 4.1 Reference points
 
-| Player | Turns |
-|---|---|
-| Random legal cell | 22.86 ± 0.10 |
-| Hand-written heuristic (plays next to the clue with the highest mine share) | 12.41 ± 0.11 |
-| Exact probability solver (enumerates every consistent mine layout, plays the likeliest cell) | 9.92 ± 0.07 |
-| **Deployed agent**, symmetry-averaged, fresh boards | **10.36 ± 0.07** (exact solver on the same boards: 9.89 ± 0.07) |
+| Player                                                                                       | Turns                                                                   |
+| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Random legal cell                                                                            | 22.86 ± 0.10                                                           |
+| Hand-written heuristic (plays next to the clue with the highest mine share)                  | 12.41 ± 0.11                                                           |
+| Exact probability solver (enumerates every consistent mine layout, plays the likeliest cell) | 9.92 ± 0.07                                                            |
+| **Deployed agent**, symmetry-averaged, fresh boards                                    | **10.36 ± 0.07** (exact solver on the same boards: 9.89 ± 0.07) |
 
 The deployed agent is 0.47 turns behind the exact solver (paired 95% CI +0.38 to +0.57). Without symmetry averaging it scores 10.61 ± 0.08.
 
@@ -123,23 +137,23 @@ The deployed agent is 0.47 turns behind the exact solver (paired 95% CI +0.38 to
 
 **Ingredients added one at a time**
 
-| Version | Weights | Turns, plain | Turns, symmetry-averaged |
-|---|---|---|---|
-| 1. Raw channels, fully connected head, DQN | 319,076 | 21.23 ± 0.52 | 19.82 ± 0.94 |
-| 2. + engineered feature channels | 320,228 | 16.09 ± 1.04 | 13.54 ± 0.82 |
-| 3. + fully convolutional head | 114,945 | 12.40 ± 1.19 | 10.82 ± 0.24 |
-| 4. + Double DQN | 114,945 | 12.21 ± 0.42 | 10.70 ± 0.15 |
-| 5. + symmetry augmentation (final) | 114,945 | **10.54 ± 0.09** | **10.31 ± 0.15** |
+| Version                                    | Weights | Turns, plain            | Turns, symmetry-averaged |
+| ------------------------------------------ | ------- | ----------------------- | ------------------------ |
+| 1. Raw channels, fully connected head, DQN | 319,076 | 21.23 ± 0.52           | 19.82 ± 0.94            |
+| 2. + engineered feature channels           | 320,228 | 16.09 ± 1.04           | 13.54 ± 0.82            |
+| 3. + fully convolutional head              | 114,945 | 12.40 ± 1.19           | 10.82 ± 0.24            |
+| 4. + Double DQN                            | 114,945 | 12.21 ± 0.42           | 10.70 ± 0.15            |
+| 5. + symmetry augmentation (final)         | 114,945 | **10.54 ± 0.09** | **10.31 ± 0.15**  |
 
 **One ingredient removed from the final recipe**
 
-| Version | Turns, plain | Difference to final (95% interval) |
-|---|---|---|
-| Final recipe | 10.54 ± 0.09 | reference |
-| without symmetry augmentation | 12.21 ± 0.42 | **+1.67** (+1.27 to +2.07) |
-| without the fully convolutional head | 12.08 ± 0.09 | **+1.54** (+1.46 to +1.62) |
-| without engineered features (3 raw channels) | 10.66 ± 0.16 | +0.12 (−0.01 to +0.25) |
-| without Double DQN | 10.54 ± 0.34 | +0.00 (−0.31 to +0.32) |
+| Version                                      | Turns, plain  | Difference to final (95% interval) |
+| -------------------------------------------- | ------------- | ---------------------------------- |
+| Final recipe                                 | 10.54 ± 0.09 | reference                          |
+| without symmetry augmentation                | 12.21 ± 0.42 | **+1.67** (+1.27 to +2.07)   |
+| without the fully convolutional head         | 12.08 ± 0.09 | **+1.54** (+1.46 to +1.62)   |
+| without engineered features (3 raw channels) | 10.66 ± 0.16 | +0.12 (−0.01 to +0.25)            |
+| without Double DQN                           | 10.54 ± 0.34 | +0.00 (−0.31 to +0.32)            |
 
 1. **Augmentation and the convolutional head carry the result.** The head shares one rule across 36 cells (2.8× fewer weights) and augmentation gives eight times the data. Removing either costs about 1.6 turns.
 2. **Engineered features matter only without augmentation.** They are worth 5.1 turns in the cumulative ladder but +0.12 (interval includes zero) once augmentation is present. The deployed model still uses them.
@@ -150,23 +164,23 @@ The deployed agent is 0.47 turns behind the exact solver (paired 95% CI +0.38 to
 
 Solo, on the 2,000 shared boards, with the exported model as the web page runs it:
 
-| Level | Temperature $T$ | Turns |
-|---|---|---|
-| Easy | 0.526 | 17.37 ± 0.13 |
-| Medium | 0.172 | 12.56 ± 0.09 |
-| Hard | $0$ | 10.42 ± 0.07 |
+| Level  | Temperature $T$ | Turns         |
+| ------ | ---------------- | ------------- |
+| Easy   | 0.526            | 17.37 ± 0.13 |
+| Medium | 0.172            | 12.56 ± 0.09 |
+| Hard   | $0$            | 10.42 ± 0.07 |
 
 Head to head, 1,000 games per row, seat and first move alternating (95% Wilson interval for the first player):
 
-| Match | Win rate | 95% interval | Mean bomb margin |
-|---|---|---|---|
-| Hard vs hand-written heuristic | 75.2% | 72.4% - 77.8% | +2.57 |
-| Medium vs hand-written heuristic | 56.5% | 53.4% - 59.5% | +0.54 |
-| Easy vs hand-written heuristic | 15.6% | 13.5% - 18.0% | −3.83 |
-| Hard vs Medium | 73.9% | 71.1% - 76.5% | +2.55 |
-| Medium vs Easy | 85.3% | 83.0% - 87.4% | +4.11 |
-| Hard vs Easy | 95.4% | 93.9% - 96.5% | +5.69 |
-| Exact solver vs Hard | 54.9% | 51.8% - 58.0% | +0.54 |
+| Match                            | Win rate | 95% interval  | Mean bomb margin |
+| -------------------------------- | -------- | ------------- | ---------------- |
+| Hard vs hand-written heuristic   | 75.2%    | 72.4% - 77.8% | +2.57            |
+| Medium vs hand-written heuristic | 56.5%    | 53.4% - 59.5% | +0.54            |
+| Easy vs hand-written heuristic   | 15.6%    | 13.5% - 18.0% | −3.83           |
+| Hard vs Medium                   | 73.9%    | 71.1% - 76.5% | +2.55            |
+| Medium vs Easy                   | 85.3%    | 83.0% - 87.4% | +4.11            |
+| Hard vs Easy                     | 95.4%    | 93.9% - 96.5% | +5.69            |
+| Exact solver vs Hard             | 54.9%    | 51.8% - 58.0% | +0.54            |
 
 Single games vary (the per-game standard deviation of Hard is about 1.6 turns), so Medium occasionally plays as well as Hard's average.
 
@@ -201,15 +215,21 @@ python test.py calibrate   # temperatures for Easy and Medium
 python test.py vectors && node docs/tests/parity.mjs    # JavaScript port against Python (needs: npm install onnxruntime-web)
 ```
 
-| File | Purpose |
-|---|---|
-| `dqn.py` | Training: environment, network, replay buffer, symmetry augmentation, Double DQN, evaluation |
-| `export_onnx.py` | PyTorch to ONNX with symmetry averaging, verified against PyTorch |
-| `game.py` | Game rules |
-| `test.py` | Experiments: ablation variants, report generators, reference players |
-| `render.py` | Pygame viewer |
-| `docs/` | Browser demo |
-| `results/` | Per-board results written by `test.py train` (not committed) |
+| File                       | Purpose                                                                                             |
+| -------------------------- | --------------------------------------------------------------------------------------------------- |
+| `dqn.py`                 | Training: environment, network, replay buffer, symmetry augmentation, Double DQN, evaluation        |
+| `export_onnx.py`         | PyTorch to ONNX with symmetry averaging, verified against PyTorch                                   |
+| `game.py`                | Game rules                                                                                          |
+| `test.py`                | Experiments: ablation variants, report generators, reference players                                |
+| `render.py`              | Pygame viewer                                                                                       |
+| `docs/`                  | Browser demo                                                                                        |
+| `scripts/record_demo.py` | Records `assets/demo.gif` from the demo page (needs `pip install playwright`, Chrome and ffmpeg) |
+| `results/`               | Per-board results written by `test.py train` (not committed)                                       |
+
+## References
+
+* Mnih et al., *Human-level control through deep reinforcement learning*, Nature 2015 (DQN, replay buffer, target network).
+* van Hasselt, Guez and Silver, *Deep Reinforcement Learning with Double Q-learning*, AAAI 2016 (Double DQN).
 
 ## License
 

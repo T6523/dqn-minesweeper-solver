@@ -1,30 +1,23 @@
 /* Find My Mines: a survey chart. Open water is covered, soundings are the clues, mines are charted hazards. */
 :root {
-  color-scheme: dark;
-  /* surfaces */
-  --paper: #0a1722;      /* page */
-  --panel: #112433;      /* result box */
-  --line: #1d3646;       /* hairlines, clock track */
-  /* text */
-  --ink: #e9f1f4;
-  --ink-soft: #9ab0bd;
-  --ink-faint: #6a8594;  /* zero soundings */
-  /* the board: covered water, charted (revealed) cells, the grid between them */
-  --water: #1f4d66;
-  --water-hi: #2a6482;   /* a covered cell you can click, on hover */
-  --shore: #050d14;
-  --frame: #2c5a73;
-  /* the two players, the low-clock warning, and the colour of text on an accent fill */
-  --you: #4fb3ff;
-  --bot: #ffb02e;
-  --alert: #ff6b6b;
-  --on-accent: #04111a;
-  --focus: #e9f1f4;
-  /* clue numbers, from one neighbouring mine to five or more; hues kept away from the two player colours */
-  --d1: #b7e86b; --d2: #ff9b7a; --d3: #f58bd0; --d4: #b99cff; --d5: #5eead4;
+  color-scheme: light;
+  --paper: #f4f7fb; --panel: #e5ecf3; --line: #cdd5df;
+  --ink: #0f1b2b; --ink-soft: #485463; --ink-faint: #586474;
+  --water: #adc0d4; --water-hi: #bed4eb; --shore: #fcfeff; --frame: #566b86;
+  --you: #0060c1; --bot: #b75400; --alert: #ba022f; --on-accent: #f9fcff; --focus: #0f1b2b;
+  --d1: #007a8f; --d2: #067f25; --d3: #a86200; --d4: #d1007a; --d5: #8a1fe0;
   --gap: 3px;
   --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;   /* numbers: scores, clues, board labels */
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #0b1016; --panel: #141b24; --line: #28313d;
+  --ink: #ebeff4; --ink-soft: #abb6c1; --ink-faint: #909dab;
+  --water: #2d3e55; --water-hi: #3b516e; --shore: #03060b; --frame: #506580;
+  --you: #63b3ff; --bot: #ff9e53; --alert: #fd7277; --on-accent: #050911; --focus: #ebeff4;
+  --d1: #00e5ff; --d2: #39ff88; --d3: #ffe600; --d4: #ff3db8; --d5: #d46bff;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -57,6 +50,7 @@ body {
 .links { display: flex; flex-wrap: wrap; gap: 2px 18px; }
 .repo-link { color: var(--ink-soft); font-size: 1rem; text-underline-offset: 3px; }
 .repo-link:hover { color: var(--ink); }
+.theme-toggle { padding: .15rem .7rem; font-size: .95rem; border-width: 1.5px; }
 .lede { margin: 8px 0 0; max-width: 44ch; font-size: 1rem; color: var(--ink-soft); }
 
 /* choosing an opponent */

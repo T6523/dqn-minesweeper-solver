@@ -3,14 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="dark">
-  <meta name="theme-color" content="#0a1722">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f4f7fb">
+  <script>
+    try { var t = localStorage.getItem("fmm.theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
   <title>Find My Mines</title>
   <meta name="description" content="Take turns uncovering a 6x6 minefield against a bot that learned the game by reinforcement learning. It runs entirely in your browser.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 40 40%27%3E%3Cg stroke=%27%230e2b3b%27 stroke-width=%273.2%27 stroke-linecap=%27round%27%3E%3Cpath d=%27M20 4v7M20 29v7M4 20h7M29 20h7M8.7 8.7l5 5M26.3 26.3l5 5M31.3 8.7l-5 5M13.7 26.3l-5 5%27/%3E%3C/g%3E%3Ccircle cx=%2720%27 cy=%2720%27 r=%2711%27 fill=%27%230e2b3b%27/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 40 40%27%3E%3Cg stroke=%27%23566b86%27 stroke-width=%273.2%27 stroke-linecap=%27round%27%3E%3Cpath d=%27M20 4v7M20 29v7M4 20h7M29 20h7M8.7 8.7l5 5M26.3 26.3l5 5M31.3 8.7l-5 5M13.7 26.3l-5 5%27/%3E%3C/g%3E%3Ccircle cx=%2720%27 cy=%2720%27 r=%2711%27 fill=%27%23566b86%27/%3E%3C/svg%3E">
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/ort.min.js"></script>
 </head>
@@ -20,7 +23,7 @@
     <header class="masthead">
       <div class="masthead-top">
         <h1>Find My Mines</h1>
-        <nav class="links"><a class="repo-link" href="https://github.com/T6523/dqn-minesweeper-solver" rel="noopener">View the code on GitHub</a><a class="repo-link" href="#about-title">About the bot</a></nav>
+        <nav class="links"><a class="repo-link" href="https://github.com/T6523/dqn-minesweeper-solver" rel="noopener">View the code on GitHub</a><a class="repo-link" href="#about-title">About the bot</a><button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Dark mode</button></nav>
       </div>
       <p class="lede">Find more of the 11 mines than the bot. A mine lets you go again; an empty cell passes the turn.</p>
     </header>
